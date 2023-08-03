@@ -66,7 +66,7 @@ class ActivityWatchClient:
         testing=False,
         host=None,
         port=None,
-        protocol="http",
+        protocol="https",
     ) -> None:
         """
         A handy wrapper around the aw-server REST API. The recommended way of interacting with the server.
@@ -128,6 +128,7 @@ class ActivityWatchClient:
             data=bytes(json.dumps(data), "utf8"),
             headers=headers,
             params=params,
+            verify=False,
         )
 
     @always_raise_for_request_errors
