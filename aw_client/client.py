@@ -27,6 +27,8 @@ from aw_core.models import Event
 from .config import load_config
 from .singleinstance import SingleInstance
 
+import ssl
+
 # FIXME: This line is probably badly placed
 logging.getLogger("requests").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -82,7 +84,7 @@ def send_request_token(hostname,server,file_path):
        
     try:
         headers = {"Content-Type": "application/json"}
-        response = requests.post(server, json=data, headers=headers)
+        response = requests.post(server, json=data, headers=headers, verify=False)
         response.raise_for_status()  # Raise an exception for HTTP errors
         response_data = response.json()  # Parse the JSON response data
         
@@ -123,7 +125,8 @@ def run_check_file(func):
     def wrapper(self, *args, headers=None, **kwargs):
         default_headers = {"Content-type": "application/json", "charset": "utf-8"}
         # token = check_file(self.client_hostname, "http://127.0.0.1:5600/register")
-        token = check_file(self.client_hostname, "http://{}:{}/register".format(self.server_host, self.server_port))
+        # token = check_file(self.client_hostname, "http://{}:{}/register".format(self.server_host, self.server_port))
+        token = check_file(self.client_hostname, self.server_address + "/register")
         if token:
             default_headers["Authorization"] = token
         # Merge the default headers with the headers provided as an argument
@@ -169,14 +172,19 @@ class ActivityWatchClient:
 
         server_host = host or server_config["hostname"]
         server_port = port or server_config["port"]
-
+        server_protocol = server_config["protocol"] or protocol # the protocol is in last because i want make the server_config is the main default if its have value
+        
         self.server_host = server_host
         self.server_port = server_port
+        self.server_protocol = server_protocol 
+
         self.server_address = "{protocol}://{host}:{port}".format(
-            protocol=protocol, host=server_host, port=server_port
+            protocol=server_protocol, host=server_host, port=server_port
         )
-#        check_file(self.client_hostname, "http://127.0.0.1:5600/register")
-        check_file(self.client_hostname, "http://{}:{}/register".format(server_host, server_port))
+
+    #    check_file(self.client_hostname, "http://127.0.0.1:5600/register")
+    #     check_file(self.client_hostname, "http://{}:{}/register".format(server_host, server_port))
+        check_file(self.client_hostname, self.server_address + "/register")
         self.instance = SingleInstance(
             f"{self.client_name}-at-{server_host}-on-{server_port}"
         )
@@ -203,30 +211,55 @@ class ActivityWatchClient:
     @run_check_file
     @always_raise_for_request_errors
     def _post(
-        self,
-        endpoint: str,
-        data: Union[List[Any], Dict[str, Any]],
-        params: Optional[dict] = None,
-        headers=str,
-    ) -> req.Response:
-        #headers = {"Content-type": "application/json", "charset": "utf-8", "Authorization":token}
-        # print("POST Request:")
-        # print("Endpoint:", self._url(endpoint))
-        print("Data:", data)
-        print("Headers:", headers)
-        # print("Params:", params)
-        # print("HEADERS POST",headers)
+            self,
+            endpoint: str,
+            data: Union[List[Any], Dict[str, Any]],
+            params: Optional[dict] = None,
+            headers=str,
+        ) -> req.Response:
+        cert_content = """-----BEGIN CERTIFICATE-----
+MIID5zCCAs+gAwIBAgIUGJgsmzl9YHWWNezRBM1EojB2iEQwDQYJKoZIhvcNAQEL
+BQAwgZcxEjAQBgNVBAMMCWxvY2FsaG9zdDEnMCUGA1UECgweUFQgQmFuayBNYW5k
+aXJpIChQZXJzZXJvKSBUYmsuMScwJQYDVQQLDB5QVCBCYW5rIE1hbmRpcmkgKFBl
+cnNlcm8pIFRiay4xEDAOBgNVBAcMB0pha2FydGExEDAOBgNVBAgMB0pha2FydGEx
+CzAJBgNVBAYTAklEMB4XDTIzMDgwMjAzNTQyOFoXDTI0MDgwMTAzNTQyOFowgZcx
+EjAQBgNVBAMMCWxvY2FsaG9zdDEnMCUGA1UECgweUFQgQmFuayBNYW5kaXJpIChQ
+ZXJzZXJvKSBUYmsuMScwJQYDVQQLDB5QVCBCYW5rIE1hbmRpcmkgKFBlcnNlcm8p
+IFRiay4xEDAOBgNVBAcMB0pha2FydGExEDAOBgNVBAgMB0pha2FydGExCzAJBgNV
+BAYTAklEMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlcx8MPLqf/hu
+AnrTmrbyh20VkpGcZXtS8llcY923P22A/CfZUFEpbbXyIf2yCAfa4mZ05MA7WREz
+4C6WMPkgeYgzwdcuH6KCJPOaSDlKU8GB04wI/5U3gSQ7EqciWOn57tflQsJbdfil
+DMk3ygFPQhxN0euN2QT5RiGSU2lrtUYSCd+xXERLadpLnqALpdR8Bfm3OJkDi5oj
+qDLrF2on8UZTuJLrwChRMZiC668iTrUtNYbTB7g8N5e0+SCw+3g9vyd10B5V4P7S
+tY/T9dXO8ELteOWw1W8I1/Y2vdne+EaNjmjYvwEaKOssAmLga/GafZwiAhNb3Bww
+hSZHkg8WuwIDAQABoykwJzAlBgNVHREEHjAcgglsb2NhbGhvc3SHBH8AAAGCCWxv
+Y2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEAiAo9Nqwo+cYKwWNNFJrUp+eTXxRc
+HzcmgZyG15jT1qxfruIpkzjzgyjNE5UPqOdcK/Zbu+sITCb0CzkHFQy6AnGw5M9I
+lGEVTTuA2T9d1YxiYIph9dk/FhGBFESr5S+k9gbboY9K6QHmpwAt4JmZpyFwGcLZ
+bCQqrbtBvmM5XOU2bAUmUGDM+Tyk5GyqsPcQFrkDO9am4FMW5JaB7HM+E1vN4DGg
+7JjokE3BlEWvq+bWjSYbnZoGO0aTTkPGVYKETbpU8K6rAVXW2tFMC1WbPTdgbCtm
+q0XGrWpaAfpKteijMKu6UjImF29P18D/QrFzBGdPhS94AqNDO4wykrVxeg==
+-----END CERTIFICATE-----
+"""
+
+        cert_path = "server_cert.pem"
+        with open(cert_path, "w") as cert_file:
+            cert_file.write(cert_content)
+        
+        ssl_context = None
+        if self.server_protocol == "https":
+            ssl_context = cert_path
+        
         response = req.post(
             self._url(endpoint),
             data=bytes(json.dumps(data), "utf8"),
             headers=headers,
             params=params,
+            verify=ssl_context
         )
-        # print("Response:")
-        # print("Status Code:", response.status_code)
-        # print("Response Headers:", response.headers)
-        # print("Response Content:", response.text)
-        return response
+        
+        return response    
+    
 
     @run_check_file
     @always_raise_for_request_errors

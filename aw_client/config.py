@@ -2,15 +2,17 @@ from aw_core.config import load_config_toml
 
 default_config = """
 [server]
-hostname = "127.0.0.1"
+hostname = "localhost"
 port = "5600"
+protocol = "https"
 
 [client]
 commit_interval = 10
 
 [server-testing]
-hostname = "127.0.0.1"
+hostname = "localhost"
 port = "5666"
+protocol = "https"
 
 [client-testing]
 commit_interval = 5
