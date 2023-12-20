@@ -25,6 +25,7 @@ from aw_core.models import Event
 
 from .config import load_config
 from .singleinstance import SingleInstance
+from security import safe_requests
 
 # FIXME: This line is probably badly placed
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -113,7 +114,7 @@ class ActivityWatchClient:
 
     @always_raise_for_request_errors
     def _get(self, endpoint: str, params: Optional[dict] = None) -> req.Response:
-        return req.get(self._url(endpoint), params=params)
+        return safe_requests.get(self._url(endpoint), params=params)
 
     @always_raise_for_request_errors
     def _post(
