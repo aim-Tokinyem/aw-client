@@ -131,7 +131,8 @@ class ActivityWatchClient:
         )
 
     @always_raise_for_request_errors
-    def _delete(self, endpoint: str, data: Any = dict()) -> req.Response:
+    def _delete(self, endpoint: str, data: Optional[Any] = None) -> req.Response:
+        data = {} if data is None else data
         headers = {"Content-type": "application/json"}
         return req.delete(self._url(endpoint), data=json.dumps(data), headers=headers)
 
